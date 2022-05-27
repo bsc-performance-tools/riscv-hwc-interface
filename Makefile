@@ -1,15 +1,13 @@
-PAPI_HOME = /apps/riscv/papi/6.0.0
-
 libpapi.so: papi.c
-	gcc -fPIC -I$(PAPI_HOME)/include -c $^
-#	gcc -DDEBUG -fPIC -I$(PAPI_HOME)/include -c $^
-	gcc -shared -o lib/$@ papi.o
+	gcc -g -DEPI_EPAC_VPU -O3 -fPIC -I/apps/riscv/papi/6.0.0/include -c $^
+	#gcc -g -DEPI_EPAC_VPU -O2 -DDEBUG -fPIC -I/apps/riscv/papi/6.0.0/include -c $^
+	gcc -g -O2 -shared -o $@ papi.o
 
 test: test.c
-	gcc test.c -I$(PAPI_HOME)/include -Wl,-rpath,. -L. -lpapi -o $@
+	clang -g -O0 -mepi test.c -I/apps/riscv/papi/6.0.0/include -Wl,-rpath,. -L. -lpapi -o $@
 #	gcc test.c -I. -Wl,-rpath,. -L. -lpapi -o $@
 
 all: libpapi.so test
 
 clean:
-	rm -f lib/libpapi.so test
+	rm -f libpapi.so test

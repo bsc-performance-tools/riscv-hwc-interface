@@ -20,6 +20,7 @@
 
 int   fake_PAPI_count_eventsets = 0;
 uint64_t **fake_PAPI_EventSets;
+uint8_t *fixed_counter_use;
 
 // p. 20 https://sifive.cdn.prismic.io/sifive%2F834354f0-08e6-423c-bf1f-0cb58ef14061_fu540-c000-v1.0.pdf
 struct RISCV_counter_def
@@ -31,8 +32,8 @@ struct RISCV_counter_def
 
 enum riscv_hwc_map
 {
-	INST_RETIRED = 59,
-	CYCLES = 50,
+	INST_RETIRED = 50,
+	CYCLES = 59,
 	EXC_TAKEN = 1,
 	INT_LD,
 	INT_ST,
@@ -61,6 +62,7 @@ enum riscv_hwc_map
 
 static struct RISCV_counter_def riscv_hwc[] =
 {
+#if CPU
 	// Instruction Commit Events
 	{ ( 1 << 8 ),  "EXC_TAKEN",      "Exception taken" },                                      /* 0 */
 	{ ( 1 << 9 ),  "INT_LD",         "Integer load instruction retired" },
@@ -90,53 +92,67 @@ static struct RISCV_counter_def riscv_hwc[] =
 	{ ((1 << 8)  | (2 & 0xFF)),  "INST_CACHE_MISS", "Instruction cache miss" },
 	{ ((1 << 9)  | (2 & 0xFF)),  "MEM_MAP_IO_ADDR", "Memory-mapped I/O access" },
 
+#elif EPI_EPAC_VPU
+	//Avispado
+	{0x001, "PAPI_L1_ICM",         "Level 1 instruction cache misses" },
+	{0x002, "PAPI_L1_DCM",         "Level 1 data cache misses" },
+	{0x003, "PAPI_TLB_IM",         "Instruction translation lookaside buffer misses" },
+	{0x004, "PAPI_TLB_DM",         "Data translation lookaside buffer misses" },
+	{0x005, "NUM_EXCEPTIONS",      "Number of Exceptions" },
+	{0x006, "NUM_RET_TRAP_INST",   "Number of executed ERET/MRET/SRET instructions" },
+	{0x007, "NUM_NUKES",           "Number of nukes" },
+	{0x008, "NUM_MISFETCHES",      "Misfetches" },
+	{0x009, "NUM_MISPREDICTS",     "Mispredicts" },
+	{0x00A, "NUM_LOAD_LIKE_INST",  "Number of Load-like committed instructions" },
+	{0x00B, "NUM_STORE_LIKE_INST", "Number of Store-like committed instructions" },
+	{0x00C, "NUM_CTRL_FLOW_INST",  "Number of Control Flow committed instructions" },
+	//VPU Counters
+	{0x020, "VPU_COMPLETED_INST",      "Number of finished intructions at the VPU" },
+	{0x040, "VPU_ISSUED_INST",         "Number of issued instructions at the VPU" },
+	{0x060, "VPU_KILLS_COUNT",         "Number of kill events (not instructions) at the VPU" },
+	{0x080, "VPU_LOAD_RETRIES",        "Number of load instructions with retries" },
+	{0x0A0, "VPU_OVERLAPS_TAKEN",      "Number of instructions taking advantage of overlapping" },
+	{0x0C0, "VPU_MEM_DEPEN",           "Number of memory instructions with dependencies (index or mask)" },
+	{0x0E0, "VPU_ACTIVE",          "Number of cycles the VPU has been active" },
+	{0x100, "VPU_STALLED",         "Number of cycles the VPU has been stalled" },
+	{0x120, "VPU_RENAMING_STALL",      "Number of cycles stalled at renaming due to lack of physical registers" },
+	{0x140, "VPU_MASKED_STALL",        "Number of cycles stalled at the renaming due to the lack of physical registers for mask" },
+	{0x160, "VPU_PRE_ISSUE_STALL",     "Number of cycles stalled at the Pre-Issue Queue" },
+	{0x180, "VPU_UNPACKER_STALL",      "Number of cycles stalled at the Unpacker" },
+	{0x1A0, "VPU_ROB_STALL",           "Number of cycles stalled at the Reorder Buffer" },
+	{0x1C0, "VPU_ARITH_Q_STALL",       "Number of cycles stalled because the Arithmetic Queue is full" },
+	{0x1E0, "VPU_MEMORY_Q_STALL",      "Number of cycles stalled because the Memory Queue is full" },
+	{0x200, "VPU_PRE_ISSUE_EMPTY",     "Number of cycles the Pre-Issue Queue has been empty" },
+	{0x220, "VPU_UNPACKER_EMPTY",      "Number of cycles the Unpacker has been empty" },
+	{0x240, "VPU_ROB_EMPTY",           "Number of cycles the Reorder Buffer has been empty" },
+	{0x260, "VPU_ARITH_Q_EMPTY",       "Number of cycles the Arithmetic Queue has been empty" },
+	{0x280, "VPU_MEMORY_Q_EMPTY",      "Number of cycles the Memory Queue has been empty" },
+	{0x2A0, "VPU_ARITH_INST",          "Number of arithmetic instructions issued" },
+	{0x2C0, "VPU_MEM_INST",            "Number of memory instructions issued" },
+	{0x2E0, "VPU_OVERLAP_INST",        "Number of overlappable instructions issued" },
+	{0x300, "VPU_FP_INST",             "Number of Floating-Point instructions issued" },
+	{0x320, "VPU_FP_FMA_INST",         "Number of Floating-Point FMA instructions issued" }
 	//EPAC Old VPU Faltan los eventos por lane!!!
-	{0x020, "Load_Retries",                 "Number of Loads Retries" },
-	{0x040, "Complete_Vector_Instructions", "Number of Vector instructions finished at the VPU" },
-	{0x060, "Cycles_Stalled_VPU",           "Counts cycles that the VPU was stalled" },
-	{0x080, "Cycles_Stalled_Renaming",      "Counts cycles stalled at renaming due to lack of physical registers" },
-	{0x0A0, "Cycles_Stalled_Masked",        "Counts cycles stalled at the renaming due to the lack of physical registers for mask" },
-	{0x0C0, "Cycles_Stalled_Pre_Issue_Q",   "Counts cycles stalled at the Pre-Issue Queue" },
-	{0x0E0, "Cycles_Stalled_Unpacker",      "Counts cycles stalled at the Unpacker" },
-	{0x100, "Cycles_Stalled_ROB",           "Counts cycles stalled at the Re-Order Buffer" },
-	{0x120, "Cycles_Stalled_Arith_Q",       "Counts cycles stalled because Arithmetic Queue is full" },
-	{0x140, "Cycles_Stalled_Mem_Q",         "Counts cycles stalled because Memory Queue is full" },
-	{0x160, "Arithmetic_Instructions",      "Number of Arithmetic Instructions Issued" },
-	{0x180, "Memory_Instructions",          "Number of Memory Instructions Issued" },
-	{0x1A0, "Kill_Instructions",            "Number of Killed Instructions" },
-	{0x1C0, "Cycles_VPU_Active",            "Counts Cycles that the VPU was Active" },
-	{0x1E0, "Cycles_Empty_Pre_Issue_Q",     "Counts Cycles Pre-Issue Queue was Empty" },
-	{0x200, "Cycles_Empty_Unpacker",        "Counts Cycles Unpacker was Empty" },
-	{0x220, "Cycles_Empty_ROB",             "Counts Cycles Reorder Buffer was Empty" },
-	{0x240, "Cycles_Empty_Arithmetic_Q",    "Counts Cycles Arithmetic Queue was Empty" },
-	{0x260, "Cycles_Empty_Memory_Q",        "Counts Cycles Memory Queue was Empty" },
-
-	//EPAC New VPU
-	{ 0x020,  "COMPLETED_INST",  "Number of finished intructions at the VPU" },
-	{ 0x040,  "ISSUED_INST",     "Number of issued instructions at the VPU" },
-	{ 0x060,  "KILLS_COUNT",     "Number of kill events (not instructions) at the VPU" },
-	{ 0x080,  "LOAD_RETRIES",    "Number of load instructions with retries" },
-	{ 0x0A0,  "OVERLAPS_TAKEN",  "Number of instructions taking advantage of overlapping" },
-	{ 0x0C0,  "MEM_DEPEN",       "Number of memory instructions with dependencies (index or mask)" },
-	{ 0x0E0,  "VPU_ACTIVE",      "Number of cycles the VPU has been active" },
-	{ 0x100,  "VPU_STALLED",     "Number of cycles the VPU has been stalled" },
-	{ 0x120,  "RENAMING_STALL",  "Number of cycles stalled at renaming due to lack of physical registers" },
-	{ 0x140,  "MASKED_STALL",    "Number of cycles stalled at the renaming due to the lack of physical registers for mask" },
-	{ 0x160,  "PRE_ISSUE_STALL", "Number of cycles stalled at the Pre-Issue Queue" },
-	{ 0x180,  "UNPACKER_STALL",  "Number of cycles stalled at the Unpacker" },
-	{ 0x1A0,  "ROB_STALL",       "Number of cycles stalled at the Reorder Buffer" },
-	{ 0x1C0,  "ARITH_Q_STALL",   "Number of cycles stalled because the Arithmetic Queue is full" },
-	{ 0x1E0,  "MEMORY_Q_STALL",  "Number of cycles stalled because the Memory Queue is full" },
-	{ 0x200,  "PRE_ISSUE_EMPTY", "Number of cycles the Pre-Issue Queue has been empty" },
-	{ 0x220,  "UNPACKER_EMPTY",  "Number of cycles the Unpacker has been empty" },
-	{ 0x240,  "ROB_EMPTY",       "Number of cycles the Reorder Buffer has been empty" },
-	{ 0x260,  "ARITH_Q_EMPTY",   "Number of cycles the Arithmetic Queue has been empty" },
-	{ 0x280,  "MEMORY_Q_EMPTY",  "Number of cycles the Memory Queue has been empty" },
-	{ 0x2A0,  "ARITH_INST",      "Number of arithmetic instructions issued" },
-	{ 0x2C0,  "MEM_INST",        "Number of memory instructions issued" },
-	{ 0x2E0,  "OVERLAP_INST",    "Number of overlappable instructions issued" },
-	{ 0x300,  "FP_INST",         "Number of Floating-Point instructions issued" },
-	{ 0x320,  "FP_FMA_INST",     "Number of Floating-Point FMA instructions issued" }
+	//{0x020, "Load_Retries",                 "Number of Loads Retries" },
+	//{0x040, "Complete_Vector_Instructions", "Number of Vector instructions finished at the VPU" },
+	//{0x060, "Cycles_Stalled_VPU",           "Counts cycles that the VPU was stalled" },
+	//{0x080, "Cycles_Stalled_Renaming",      "Counts cycles stalled at renaming due to lack of physical registers" },
+	//{0x0A0, "Cycles_Stalled_Masked",        "Counts cycles stalled at the renaming due to the lack of physical registers for mask" },
+	//{0x0C0, "Cycles_Stalled_Pre_Issue_Q",   "Counts cycles stalled at the Pre-Issue Queue" },
+	//{0x0E0, "Cycles_Stalled_Unpacker",      "Counts cycles stalled at the Unpacker" },
+	//{0x100, "Cycles_Stalled_ROB",           "Counts cycles stalled at the Re-Order Buffer" },
+	//{0x120, "Cycles_Stalled_Arith_Q",       "Counts cycles stalled because Arithmetic Queue is full" },
+	//{0x140, "Cycles_Stalled_Mem_Q",         "Counts cycles stalled because Memory Queue is full" },
+	//{0x160, "Arithmetic_Instructions",      "Number of Arithmetic Instructions Issued" },
+	//{0x180, "Memory_Instructions",          "Number of Memory Instructions Issued" },
+	//{0x1A0, "Kill_Instructions",            "Number of Killed Instructions" },
+	//{0x1C0, "Cycles_VPU_Active",            "Counts Cycles that the VPU was Active" },
+	//{0x1E0, "Cycles_Empty_Pre_Issue_Q",     "Counts Cycles Pre-Issue Queue was Empty" },
+	//{0x200, "Cycles_Empty_Unpacker",        "Counts Cycles Unpacker was Empty" },
+	//{0x220, "Cycles_Empty_ROB",             "Counts Cycles Reorder Buffer was Empty" },
+	//{0x240, "Cycles_Empty_Arithmetic_Q",    "Counts Cycles Arithmetic Queue was Empty" },
+	//{0x260, "Cycles_Empty_Memory_Q",        "Counts Cycles Memory Queue was Empty" }
+#endif
 };
 
 #define CSR_reset(reg) asm volatile("csrc " #reg ", %0" :: "r" (-1))
@@ -200,7 +216,7 @@ int
 PAPI_start(int EventSet)
 {
 	PRINT_DEBUG
-	PAPI_reset(0);
+	PAPI_reset(EventSet);
 	return PAPI_OK;
 }
 
@@ -208,8 +224,8 @@ int
 PAPI_add_event(int EventSet, int EventCode)
 {
 	PRINT_DEBUG
-	if (EventCode == CYCLES){fake_PAPI_EventSets[EventSet][0] = CYCLES; return PAPI_OK;}
-	if (EventCode == INST_RETIRED){fake_PAPI_EventSets[EventSet][2] = INST_RETIRED; return PAPI_OK;}
+	if (EventCode == CYCLES){fake_PAPI_EventSets[EventSet][fixed_counter_use[EventSet]++] = CYCLES; return PAPI_OK;}
+	if (EventCode == INST_RETIRED){fake_PAPI_EventSets[EventSet][fixed_counter_use[EventSet]++] = INST_RETIRED; return PAPI_OK;}
 	for (int i = 3; i < MAX_HWC; i++)
 	{
 		if (fake_PAPI_EventSets[EventSet][i] == 0)
@@ -240,8 +256,8 @@ int
 PAPI_event_code_to_name(int EventCode, char *EventName)
 {
 	PRINT_DEBUG
-	if (EventCode == INST_RETIRED){ strncpy(EventName, "Instructions", strlen("Instructions")+1); return PAPI_OK;}
-	if (EventCode == CYCLES){ strncpy(EventName, "Cycles", strlen("Cycles")+1); return PAPI_OK;}
+	if (EventCode == INST_RETIRED){ strncpy(EventName, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1); return PAPI_OK;}
+	if (EventCode == CYCLES){ strncpy(EventName, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1); return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
 	for(int i = 0; i < n; i++){
 		if (EventCode == riscv_hwc[i].code){
@@ -262,7 +278,9 @@ PAPI_create_eventset(int *EventSet)
 	*EventSet = fake_PAPI_count_eventsets;
 
 	fake_PAPI_count_eventsets++;
-	fake_PAPI_EventSets = realloc(fake_PAPI_EventSets, fake_PAPI_count_eventsets*sizeof(uint64_t));
+	fake_PAPI_EventSets = realloc(fake_PAPI_EventSets, fake_PAPI_count_eventsets*sizeof(uint64_t*));
+	fixed_counter_use = realloc(fixed_counter_use, fake_PAPI_count_eventsets*sizeof(uint8_t));
+	fixed_counter_use[fake_PAPI_count_eventsets-1]=0;
 
 	fake_PAPI_EventSets[*EventSet] = calloc(MAX_HWC, sizeof(uint64_t));
 
@@ -280,8 +298,8 @@ int
 PAPI_event_name_to_code(const char *in, int *out)
 {
 	PRINT_DEBUG
-	if (strcmp(in, "Instructions") == 0){ *out = INST_RETIRED; return PAPI_OK;}
-	if (strcmp(in, "Cycles") == 0){ *out = CYCLES; return PAPI_OK;}
+	if (strcmp(in, "PAPI_TOT_INS") == 0){ *out = INST_RETIRED; return PAPI_OK;}
+	if (strcmp(in, "PAPI_TOT_CYC") == 0){ *out = CYCLES; return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);;
 	for(int i = 0; i < n; i++){
 		if (strcmp(in, riscv_hwc[i].name) == 0){
@@ -301,14 +319,14 @@ PAPI_get_event_info(int EventCode, PAPI_event_info_t *info)
 	info->count = 1;
 
 	if (EventCode == INST_RETIRED) {
-		strncpy(info->symbol, "Instructions", strlen("Instructions")+1);
-		strncpy(info->short_descr, "Instructions", strlen("Instructions")+1);
-		strncpy(info->long_descr, "Instructions", strlen("Instructions")+1);
+		strncpy(info->symbol, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1);
+		strncpy(info->short_descr, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1);
+		strncpy(info->long_descr, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1);
 		return PAPI_OK;
 	}else if (EventCode == CYCLES) {
-		strncpy(info->symbol, "Cycles", strlen("Cycles")+1);
-		strncpy(info->short_descr, "Cycles", strlen("Cycles")+1);
-		strncpy(info->long_descr, "Cycles", strlen("Cycles")+1);
+		strncpy(info->symbol, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
+		strncpy(info->short_descr, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
+		strncpy(info->long_descr, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
 		return PAPI_OK;
 	}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
@@ -383,8 +401,7 @@ PAPI_reset(int EventSet)
 {
 	PRINT_DEBUG
 	
-	int i = 0;
-	for (i = 0; i<MAX_HWC; i++)
+	for (int i = MAX_HWC-1; 0 <= i; i--)
 	{
 		if (fake_PAPI_EventSets[EventSet][i] == INST_RETIRED){
 			i_hwc_values[i] = read_instret();
@@ -395,7 +412,6 @@ PAPI_reset(int EventSet)
 			i_hwc_values[i] = CSR_read_hpmcounter(i);
 		}
 	}
-
 	return PAPI_OK;
 }
 
@@ -415,7 +431,6 @@ PAPI_read(int EventSet, long long *hwc_values)
 			hwc_values[count++] = CSR_read_hpmcounter(i) - i_hwc_values[i];
 		}
 	}
-
 	return PAPI_OK;
 }
 
