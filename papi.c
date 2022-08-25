@@ -6,6 +6,7 @@
 #include <sys/syscall.h>
 
 //#include "papi.h"
+#include "csr.h"
 #include <papi.h>
 
 #define MAX_HWC 5
@@ -34,6 +35,8 @@ enum riscv_hwc_map
 {
 	INST_RETIRED = 50,
 	CYCLES = 59,
+	CSR_VL = 0x6001,
+	CSR_VTYPE_SEW = 0x6002,
 	EXC_TAKEN = 1,
 	INT_LD,
 	INT_ST,
@@ -91,6 +94,9 @@ static struct RISCV_counter_def riscv_hwc[] =
 	// Memory System Events
 	{ ((1 << 8)  | (2 & 0xFF)),  "INST_CACHE_MISS", "Instruction cache miss" },
 	{ ((1 << 9)  | (2 & 0xFF)),  "MEM_MAP_IO_ADDR", "Memory-mapped I/O access" },
+
+	{0x6001, "CSR_VL",             "Get VL register" },
+	{0x6002, "CSR_VTYPE_SEW",      "Get SEW from vtype register" },
 
 #elif EPI_EPAC_VPU
 	//Avispado
@@ -226,6 +232,7 @@ PAPI_add_event(int EventSet, int EventCode)
 	PRINT_DEBUG
 	if (EventCode == CYCLES){fake_PAPI_EventSets[EventSet][fixed_counter_use[EventSet]++] = CYCLES; return PAPI_OK;}
 	if (EventCode == INST_RETIRED){fake_PAPI_EventSets[EventSet][fixed_counter_use[EventSet]++] = INST_RETIRED; return PAPI_OK;}
+	if (EventCode == CSR_VL){fake_PAPI_EventSets[EventSet][fixed_counter_use[EventSet]++] = CSR_VL; return PAPI_OK;}
 	for (int i = 3; i < MAX_HWC; i++)
 	{
 		if (fake_PAPI_EventSets[EventSet][i] == 0)
@@ -258,6 +265,7 @@ PAPI_event_code_to_name(int EventCode, char *EventName)
 	PRINT_DEBUG
 	if (EventCode == INST_RETIRED){ strncpy(EventName, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1); return PAPI_OK;}
 	if (EventCode == CYCLES){ strncpy(EventName, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1); return PAPI_OK;}
+	if (EventCode == CSR_VL){ strncpy(EventName, "CSR_VL", strlen("CSR_VL")+1); return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
 	for(int i = 0; i < n; i++){
 		if (EventCode == riscv_hwc[i].code){
@@ -300,6 +308,7 @@ PAPI_event_name_to_code(const char *in, int *out)
 	PRINT_DEBUG
 	if (strcmp(in, "PAPI_TOT_INS") == 0){ *out = INST_RETIRED; return PAPI_OK;}
 	if (strcmp(in, "PAPI_TOT_CYC") == 0){ *out = CYCLES; return PAPI_OK;}
+	if (strcmp(in, "CSR_VL") == 0){ *out = CSR_VL; return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);;
 	for(int i = 0; i < n; i++){
 		if (strcmp(in, riscv_hwc[i].name) == 0){
@@ -327,6 +336,11 @@ PAPI_get_event_info(int EventCode, PAPI_event_info_t *info)
 		strncpy(info->symbol, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
 		strncpy(info->short_descr, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
 		strncpy(info->long_descr, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1);
+		return PAPI_OK;
+	}else if (EventCode == CSR_VL) {
+		strncpy(info->symbol, "CSR_VL", strlen("CSR_VL")+1);
+		strncpy(info->short_descr, "CSR_VL", strlen("CSR_VL")+1);
+		strncpy(info->long_descr, "CSR_VL", strlen("CSR_VL")+1);
 		return PAPI_OK;
 	}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
@@ -407,6 +421,8 @@ PAPI_reset(int EventSet)
 			i_hwc_values[i] = read_instret();
 		}else if (fake_PAPI_EventSets[EventSet][i] == CYCLES){
 			i_hwc_values[i] = read_cycles();
+		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
+			i_hwc_values[i] = 0;
 		}else if (fake_PAPI_EventSets[EventSet][i] != 0){
 			CSR_configure(i, fake_PAPI_EventSets[EventSet][i]);
 			i_hwc_values[i] = CSR_read_hpmcounter(i);
@@ -427,6 +443,8 @@ PAPI_read(int EventSet, long long *hwc_values)
 			hwc_values[count++] = read_instret() - i_hwc_values[i];
 		}else if (fake_PAPI_EventSets[EventSet][i] == CYCLES){
 			hwc_values[count++] = read_cycles() - i_hwc_values[i];
+		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
+			i_hwc_values[i] += read_csr_vl(); hwc_values[count++] = i_hwc_values[i];
 		}else if(fake_PAPI_EventSets[EventSet][i] != 0){
 			hwc_values[count++] = CSR_read_hpmcounter(i) - i_hwc_values[i];
 		}
@@ -451,6 +469,8 @@ PAPI_accum(int EventSet, long long *hwc_values)
 			t_hwc_values[i] = read_cycles();
 			hwc_values[count++] = (long long)(t_hwc_values[i] - i_hwc_values[i]);
 			i_hwc_values[i] = t_hwc_values[i];
+		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
+			hwc_values[count++] = read_csr_vl();
 		}else if(fake_PAPI_EventSets[EventSet][i] != 0){
 			t_hwc_values[i] = CSR_read_hpmcounter(i);
 			hwc_values[count++] = (long long)(t_hwc_values[i] - i_hwc_values[i]);
