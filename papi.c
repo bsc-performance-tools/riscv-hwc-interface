@@ -33,8 +33,8 @@ struct RISCV_counter_def
 
 enum riscv_hwc_map
 {
-	INST_RETIRED = 50,
-	CYCLES = 59,
+	INST_RETIRED = 50 | PAPI_PRESET_MASK,
+	CYCLES = 59 | PAPI_PRESET_MASK,
 	CSR_VL = 0x6001,
 	CSR_VTYPE_SEW = 0x6002,
 	EXC_TAKEN = 1,
@@ -216,7 +216,7 @@ read_instret()
 	return tmp;
 }
 
-static unsigned long long i_hwc_values[MAX_HWC] = { 0, 0, 0, 0, 0};
+static long long i_hwc_values[MAX_HWC] = { 0, 0, 0, 0, 0};
 
 int
 PAPI_start(int EventSet)
@@ -414,6 +414,8 @@ int
 PAPI_reset(int EventSet)
 {
 	PRINT_DEBUG
+
+	static short int vl_first_reset = 1;
 	
 	for (int i = MAX_HWC-1; 0 <= i; i--)
 	{
@@ -421,8 +423,11 @@ PAPI_reset(int EventSet)
 			i_hwc_values[i] = read_instret();
 		}else if (fake_PAPI_EventSets[EventSet][i] == CYCLES){
 			i_hwc_values[i] = read_cycles();
-		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
+		}else if ((vl_first_reset) && (fake_PAPI_EventSets[EventSet][i] == CSR_VL)){
 			i_hwc_values[i] = 0;
+			vl_first_reset = 0;
+		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
+			i_hwc_values[i] = (-1)*read_csr_vl();
 		}else if (fake_PAPI_EventSets[EventSet][i] != 0){
 			CSR_configure(i, fake_PAPI_EventSets[EventSet][i]);
 			i_hwc_values[i] = CSR_read_hpmcounter(i);
@@ -444,7 +449,8 @@ PAPI_read(int EventSet, long long *hwc_values)
 		}else if (fake_PAPI_EventSets[EventSet][i] == CYCLES){
 			hwc_values[count++] = read_cycles() - i_hwc_values[i];
 		}else if (fake_PAPI_EventSets[EventSet][i] == CSR_VL){
-			i_hwc_values[i] += read_csr_vl(); hwc_values[count++] = i_hwc_values[i];
+			i_hwc_values[i] += read_csr_vl();
+			hwc_values[count++] = i_hwc_values[i];
 		}else if(fake_PAPI_EventSets[EventSet][i] != 0){
 			hwc_values[count++] = CSR_read_hpmcounter(i) - i_hwc_values[i];
 		}
@@ -456,7 +462,7 @@ int
 PAPI_accum(int EventSet, long long *hwc_values)
 {
 	PRINT_DEBUG
-	unsigned long long t_hwc_values[MAX_HWC] = { 0, 0, 0, 0, 0 };
+	long long t_hwc_values[MAX_HWC] = { 0, 0, 0, 0, 0 };
 	int count = 0;
 	int i = 0;
 	for (i = 0; i<MAX_HWC; i++)
