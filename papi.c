@@ -35,8 +35,14 @@ enum riscv_hwc_map
 {
 	INST_RETIRED = 50 | PAPI_PRESET_MASK,
 	CYCLES = 59 | PAPI_PRESET_MASK,
+  L1_ICM =  1 | PAPI_PRESET_MASK,
+  L1_DCM =  0 | PAPI_PRESET_MASK,
+  TLB_IM = 21 | PAPI_PRESET_MASK,
+  TLB_DM = 20 | PAPI_PRESET_MASK,
+
 	CSR_VL = 0x6001,
 	CSR_VTYPE_SEW = 0x6002,
+
 	EXC_TAKEN = 1,
 	INT_LD,
 	INT_ST,
@@ -137,7 +143,39 @@ static struct RISCV_counter_def riscv_hwc[] =
 	{0x2C0, "VPU_MEM_INST",            "Number of memory instructions issued" },
 	{0x2E0, "VPU_OVERLAP_INST",        "Number of overlappable instructions issued" },
 	{0x300, "VPU_FP_INST",             "Number of Floating-Point instructions issued" },
-	{0x320, "VPU_FP_FMA_INST",         "Number of Floating-Point FMA instructions issued" }
+	{0x320, "VPU_FP_FMA_INST",         "Number of Floating-Point FMA instructions issued" },
+  {0x340, "FP_WID_FMA_INST",         "Number of Floating-Point Widening FMA instructions issued" },
+  {0x360, "FP_NOT_FMA_INST",         "Number of Floating-Point not FMA instructions issued" },
+  {0x380, "FP_WIDEN_INST",           "Number of Floating-Point Widening instructions issued" },
+  {0x3A0, "FP_REDUC_INST",           "Number of Floating-Point Reduction instructions issued" },
+  {0x3C0, "WIDENING_INST",           "Number of Widening instructions issued" },
+  {0x3E0, "NARROWING_INST",          "Number of Narrowing instructions issued" },
+  {0x400, "INT_FMA_INST",            "Number of Integer FMA instructions issued" },
+  {0x420, "INT_REDUC_INST",          "Number of Integer Reduction instructions issued" },
+  {0x440, "INT_NO_REDUC_INST",       "Number of Intefer no Reduction instructions issued" },
+  {0x460, "GATHER_INST",             "Number of Gather instructions issued" },
+  {0x480, "SLIDE_INST",              "Number of Slide instructions issued" },
+  {0x4A0, "VMV_INST",                "Number of Vector Move instructions (vmv) issued" },
+  {0x4C0, "ONE_OPER_INST",           "Number of instructions with one operand issued" },
+  {0x4E0, "TWO_OPER_INST",           "Number of instructions with two operands issued" },
+  {0x500, "THREE_OPER_INST",         "Number of instructions with three operands issued" },
+  {0x520, "SCALAR_OPER_INST",        "Number of instructions with scalar operand issued" },
+  {0x540, "MEM_MASKED_INST",         "Number of Memory Masked instructions issued" },
+  {0x560, "MEM_INDEXED_INST",        "Number of Memory Indexed instructions issued" },
+  {0x580, "FAST_VMV_INST",           "Number of Fast VMV instructions done" },
+  {0x5A0, "LANE_ANY_FREE",           "Number of cycles Any VPU Lane is Free" },
+  {0x5C0, "LANE_0_FREE",             "Number of cycles VPU Lane 0 is Free" },
+  {0x5E0, "LANE_1_FREE",             "Number of cycles VPU Lane 1 is Free" },
+  {0x600, "LANE_2_FREE",             "Number of cycles VPU Lane 2 is Free" },
+  {0x620, "LANE_3_FREE",             "Number of cycles VPU Lane 3 is Free" },
+  {0x640, "LANE_4_FREE",             "Number of cycles VPU Lane 4 is Free" },
+  {0x660, "LANE_5_FREE",             "Number of cycles VPU Lane 5 is Free" },
+  {0x680, "LANE_6_FREE",             "Number of cycles VPU Lane 6 is Free" },
+  {0x6A0, "LANE_7_FREE",             "Number of cycles VPU Lane 7 is Free" },
+  {0x6C0, "LOAD_INSTR",              "Number of memory load instructions issued" },
+  {0x6E0, "STORE_INSTR",             "Number of memory store instructions issued" },
+  {0x700, "LOAD_VALID_CYCLES",       "Valid is set on a vector load" },
+  {0x720, "STORE_VALID_CYCLES",      "Valid is set on a vector store" }
 	//EPAC Old VPU Faltan los eventos por lane!!!
 	//{0x020, "Load_Retries",                 "Number of Loads Retries" },
 	//{0x040, "Complete_Vector_Instructions", "Number of Vector instructions finished at the VPU" },
@@ -237,6 +275,10 @@ PAPI_add_event(int EventSet, int EventCode)
 	{
 		if (fake_PAPI_EventSets[EventSet][i] == 0)
 		{
+      if (EventCode == L1_ICM){fake_PAPI_EventSets[EventSet][i] = 0x01; return PAPI_OK;}
+      if (EventCode == L1_DCM){fake_PAPI_EventSets[EventSet][i] = 0x02; return PAPI_OK;}
+      if (EventCode == TLB_IM){fake_PAPI_EventSets[EventSet][i] = 0x03; return PAPI_OK;}
+      if (EventCode == TLB_DM){fake_PAPI_EventSets[EventSet][i] = 0x04; return PAPI_OK;}
 			fake_PAPI_EventSets[EventSet][i] = EventCode;
 			return PAPI_OK;
 		}
@@ -266,6 +308,10 @@ PAPI_event_code_to_name(int EventCode, char *EventName)
 	if (EventCode == INST_RETIRED){ strncpy(EventName, "PAPI_TOT_INS", strlen("PAPI_TOT_INS")+1); return PAPI_OK;}
 	if (EventCode == CYCLES){ strncpy(EventName, "PAPI_TOT_CYC", strlen("PAPI_TOT_CYC")+1); return PAPI_OK;}
 	if (EventCode == CSR_VL){ strncpy(EventName, "CSR_VL", strlen("CSR_VL")+1); return PAPI_OK;}
+  if (EventCode == L1_ICM){ strncpy(EventName, "PAPI_L1_ICM", strlen("PAPI_L1_ICM")+1); return PAPI_OK;}
+  if (EventCode == L1_DCM){ strncpy(EventName, "PAPI_L1_DCM", strlen("PAPI_L1_DCM")+1); return PAPI_OK;}
+  if (EventCode == TLB_IM){ strncpy(EventName, "PAPI_TLB_IM", strlen("PAPI_TLB_IM")+1); return PAPI_OK;}
+  if (EventCode == TLB_DM){ strncpy(EventName, "PAPI_TLB_DM", strlen("PAPI_TLB_DM")+1); return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
 	for(int i = 0; i < n; i++){
 		if (EventCode == riscv_hwc[i].code){
@@ -309,6 +355,10 @@ PAPI_event_name_to_code(const char *in, int *out)
 	if (strcmp(in, "PAPI_TOT_INS") == 0){ *out = INST_RETIRED; return PAPI_OK;}
 	if (strcmp(in, "PAPI_TOT_CYC") == 0){ *out = CYCLES; return PAPI_OK;}
 	if (strcmp(in, "CSR_VL") == 0){ *out = CSR_VL; return PAPI_OK;}
+  if (strcmp(in, "PAPI_L1_ICM") == 0){ *out = L1_ICM; return PAPI_OK;}
+  if (strcmp(in, "PAPI_L1_DCM") == 0){ *out = L1_DCM; return PAPI_OK;}
+  if (strcmp(in, "PAPI_TLB_IM") == 0){ *out = TLB_IM; return PAPI_OK;}
+  if (strcmp(in, "PAPI_TLB_DM") == 0){ *out = TLB_DM; return PAPI_OK;}
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);;
 	for(int i = 0; i < n; i++){
 		if (strcmp(in, riscv_hwc[i].name) == 0){
@@ -342,7 +392,27 @@ PAPI_get_event_info(int EventCode, PAPI_event_info_t *info)
 		strncpy(info->short_descr, "CSR_VL", strlen("CSR_VL")+1);
 		strncpy(info->long_descr, "CSR_VL", strlen("CSR_VL")+1);
 		return PAPI_OK;
-	}
+	}else if (EventCode == L1_ICM) {
+		strncpy(info->symbol, "PAPI_L1_ICM", strlen("PAPI_L1_ICM")+1);
+		strncpy(info->short_descr, "PAPI_L1_ICM", strlen("PAPI_L1_ICM")+1);
+		strncpy(info->long_descr, "PAPI_L1_ICM", strlen("PAPI_L1_ICM")+1);
+		return PAPI_OK;
+	}else if (EventCode == L1_DCM) {
+		strncpy(info->symbol, "PAPI_L1_DCM", strlen("PAPI_L1_DCM")+1);
+		strncpy(info->short_descr, "PAPI_L1_DCM", strlen("PAPI_L1_DCM")+1);
+		strncpy(info->long_descr, "PAPI_L1_DCM", strlen("PAPI_L1_DCM")+1);
+		return PAPI_OK;
+	}else if (EventCode == TLB_IM) {
+		strncpy(info->symbol, "PAPI_TLB_IM", strlen("PAPI_TLB_IM")+1);
+		strncpy(info->short_descr, "PAPI_TLB_IM", strlen("PAPI_TLB_IM")+1);
+		strncpy(info->long_descr, "PAPI_TLB_IM", strlen("PAPI_TLB_IM")+1);
+		return PAPI_OK;
+	}else if (EventCode == TLB_DM) {
+		strncpy(info->symbol, "PAPI_TLB_DM", strlen("PAPI_TLB_DM")+1);
+		strncpy(info->short_descr, "PAPI_TLB_DM", strlen("PAPI_TLB_DM")+1);
+		strncpy(info->long_descr, "PAPI_TLB_DM", strlen("PAPI_TLB_DM")+1);
+		return PAPI_OK;
+  }
 	const int n = sizeof(riscv_hwc)/sizeof(riscv_hwc[0]);
 	for(int i = 0; i < n; i++){
 		if (EventCode == riscv_hwc[i].code){
