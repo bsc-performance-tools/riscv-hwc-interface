@@ -1,15 +1,17 @@
-PAPI_HOME = /apps/riscv/papi/6.0.0
-
 libpapi.so: papi.c
-	gcc -fPIC -I$(PAPI_HOME)/include -c $^
-#	gcc -DDEBUG -fPIC -I$(PAPI_HOME)/include -c $^
-	gcc -shared -o lib/$@ papi.o
+	mkdir -p lib
+	$(CC) -fPIC -Iinclude -c $^
+	$(CC) -shared -o lib/$@ papi.o
 
-test: test.c
-	gcc test.c -I$(PAPI_HOME)/include -Wl,-rpath,. -L. -lpapi -o $@
-#	gcc test.c -I. -Wl,-rpath,. -L. -lpapi -o $@
+libpapi.a: papi.c
+	mkdir -p lib
+	$(CC) -static -Iinclude -c $^
+	$(AR) cru lib/$@ papi.o
 
-all: libpapi.so test
+test: test.c libpapi.so
+	$(CC) test.c -Iinclude -Wl,-rpath,lib -Llib -lpapi -o $@
+
+all: libpapi.so libpapi.a
 
 clean:
-	rm -f lib/libpapi.so test
+	rm -rf lib papi.o test
