@@ -9,9 +9,14 @@ void main(int argc, char **argv)
 	long long hwc_values[2] = {0, 0};
 
 	int mypapiset = 0;
+	int event_inst = 0;
+	int event_cyc = 0;
+
 	PAPI_create_eventset(&mypapiset);
-	PAPI_add_event(mypapiset, INST_RETIRED);
-	PAPI_add_event(mypapiset, INST_CYCLES);
+	PAPI_event_name_to_code("Instructions", &event_inst);
+	PAPI_add_event(mypapiset, event_inst);
+	PAPI_event_name_to_code("Cycles", &event_cyc);
+	PAPI_add_event(mypapiset, event_cyc);
 
 	PAPI_start(mypapiset);
 
